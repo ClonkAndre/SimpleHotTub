@@ -12,6 +12,9 @@
         public uint LowerModel;
         public uint LowerTexture;
 
+        public uint HandModel;
+        public uint HandTexture;
+
         public uint FeetModel;
         public uint FeetTexture;
         #endregion

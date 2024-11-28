@@ -55,6 +55,9 @@ namespace SimpleHotTub
         private bool visualizeHotTubStuff;
         private bool setNewSeat;
         private int forcedSeat = -1;
+
+        private bool previousHudOnState;
+        private uint previousRadarMode;
         #endregion
 
         #region Methods
@@ -137,6 +140,16 @@ namespace SimpleHotTub
             currentCameraView = CameraView.Free;
             currentHotTub.Reset();
 
+            // Set some things
+            previousHudOnState = IVMenuManager.HudOn;
+            previousRadarMode = IVMenuManager.RadarMode;
+
+            if (ModSettings.TurnOffHudAndRadar)
+            {
+                IVMenuManager.HudOn = false;
+                IVMenuManager.RadarMode = 0;
+            }
+
             // Create hot tub cam
             hotTubCam = NativeCamera.Create();
             hotTubCam.SetTargetPed(playerHandle);
@@ -172,6 +185,7 @@ namespace SimpleHotTub
                     // Set new clothes
                     SET_CHAR_COMPONENT_VARIATION(pedHandle, 1, outfit.UpperModel, outfit.UpperTexture);
                     SET_CHAR_COMPONENT_VARIATION(pedHandle, 2, outfit.LowerModel, outfit.LowerTexture);
+                    SET_CHAR_COMPONENT_VARIATION(pedHandle, 4, outfit.HandModel, outfit.HandTexture);
                     SET_CHAR_COMPONENT_VARIATION(pedHandle, 5, outfit.FeetModel, outfit.FeetTexture);
                 }
 
@@ -219,6 +233,13 @@ namespace SimpleHotTub
             if (!inHotTub)
                 return;
 
+            // Reset some things
+            if (ModSettings.TurnOffHudAndRadar)
+            {
+                IVMenuManager.HudOn = previousHudOnState;
+                IVMenuManager.RadarMode = previousRadarMode;
+            }
+
             // Delete cam
             if (hotTubCam.IsActive)
                 hotTubCam.Deactivate();
@@ -248,6 +269,7 @@ namespace SimpleHotTub
                 {
                     SET_CHAR_COMPONENT_VARIATION(pedHandle, 1, outfit.UpperModel, outfit.UpperTexture);
                     SET_CHAR_COMPONENT_VARIATION(pedHandle, 2, outfit.LowerModel, outfit.LowerTexture);
+                    SET_CHAR_COMPONENT_VARIATION(pedHandle, 4, outfit.HandModel, outfit.HandTexture);
                     SET_CHAR_COMPONENT_VARIATION(pedHandle, 5, outfit.FeetModel, outfit.FeetTexture);
                 }
 
@@ -840,6 +862,10 @@ namespace SimpleHotTub
                 ImGuiIV.Spacing();
                 ImGuiIV.SeparatorText("The Settings");
 
+                ImGuiIV.TextUnformatted("HUD");
+                ImGuiIV.CheckBox("TurnOffHudAndRadar", ref ModSettings.TurnOffHudAndRadar);
+
+                ImGuiIV.Spacing(2);
                 ImGuiIV.TextUnformatted("Camera");
                 ImGuiIV.SliderInt("DefaultHotTubCam", ref ModSettings.DefaultHotTubCam, 0, 5);
 
@@ -849,6 +875,18 @@ namespace SimpleHotTub
 
         private void Main_Tick(object sender, EventArgs e)
         {
+            // Support for network game not yet available
+            if (IVNetwork.IsNetworkSession())
+            {
+                if (inHotTub)
+                {
+                    LeaveHotTub();
+                    ClearHelpMessages();
+                }
+
+                return;
+            }
+
             playerHandle = NativeGame.GetPlayerPedHandle();
             GET_CHAR_COORDINATES(playerHandle, out Vector3 playerPos);
 

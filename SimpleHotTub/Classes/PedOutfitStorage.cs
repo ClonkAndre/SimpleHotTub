@@ -12,6 +12,9 @@ namespace SimpleHotTub.Classes
         public uint LowerModel;
         public uint LowerTexture;
 
+        public uint HandModel;
+        public uint HandTexture;
+
         public uint FeetModel;
         public uint FeetTexture;
         #endregion
@@ -35,6 +38,9 @@ namespace SimpleHotTub.Classes
 
             storage.LowerModel = GET_CHAR_DRAWABLE_VARIATION(handle, 2);
             storage.LowerTexture = GET_CHAR_TEXTURE_VARIATION(handle, 2);
+
+            storage.HandModel = GET_CHAR_DRAWABLE_VARIATION(handle, 4);
+            storage.HandTexture = GET_CHAR_TEXTURE_VARIATION(handle, 4);
 
             storage.FeetModel = GET_CHAR_DRAWABLE_VARIATION(handle, 5);
             storage.FeetTexture = GET_CHAR_TEXTURE_VARIATION(handle, 5);
