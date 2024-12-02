@@ -53,7 +53,7 @@ namespace SimpleHotTub.Classes.Json
         }
         public CinematicInfo()
         {
-            
+            FOV = 45f;
         }
         #endregion
 

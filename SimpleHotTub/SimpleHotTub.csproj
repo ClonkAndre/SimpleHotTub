@@ -11,7 +11,7 @@
     <AssemblyName>SimpleHotTub.ivsdk</AssemblyName>
     <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
-    <Deterministic>true</Deterministic>
+    <Deterministic>false</Deterministic>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <DebugSymbols>true</DebugSymbols>
@@ -50,6 +50,7 @@
     <Compile Include="Classes\Json\HotTub.cs" />
     <Compile Include="Classes\Json\PedOutfit.cs" />
     <Compile Include="Classes\Json\SeatInfo.cs" />
+    <Compile Include="Classes\Json\StaticCamInfo.cs" />
     <Compile Include="Classes\Logging.cs" />
     <Compile Include="Classes\ModSettings.cs" />
     <Compile Include="Classes\PedOutfitStorage.cs" />

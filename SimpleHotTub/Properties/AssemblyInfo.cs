@@ -10,7 +10,7 @@ using System.Runtime.InteropServices;
 [assembly: AssemblyConfiguration("")]
 [assembly: AssemblyCompany("ItsClonkAndre")]
 [assembly: AssemblyProduct("SimpleHotTub")]
-[assembly: AssemblyCopyright("Copyright © ItsClonkAndre 2024")]
+[assembly: AssemblyCopyright("Copyright © ItsClonkAndre 2024-2025")]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]
 
@@ -29,5 +29,5 @@ using System.Runtime.InteropServices;
 //      Build Number
 //      Revision
 //
-[assembly: AssemblyVersion("1.1.0.0")]
-[assembly: AssemblyFileVersion("1.1.0.0")]
+[assembly: AssemblyVersion("1.2.0.*")]
+//[assembly: AssemblyFileVersion("1.1.0.0")]

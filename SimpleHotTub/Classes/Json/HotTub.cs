@@ -17,22 +17,30 @@ namespace SimpleHotTub.Classes.Json
         public Vector3 Position;
 
         public List<SeatInfo> SeatInfo;
-        public List<CinematicInfo> CinematicInfo;
+        public List<CinematicInfo> CinematicCameras;
+        public List<StaticCamInfo> StaticCameras;
 
         [JsonIgnore()] public CinematicInfo CurrentCinematicInfo;
         [JsonIgnore()] public int LastCinematicInfoIndex;
+
+        [JsonIgnore()] public int CurrentStaticCamIndex;
+
+        [JsonIgnore()] public bool Visualize;
         #endregion
 
         #region Constructor
         public HotTub()
         {
             SeatInfo = new List<SeatInfo>();
-            CinematicInfo = new List<CinematicInfo>();
+            CinematicCameras = new List<CinematicInfo>();
+            StaticCameras = new List<StaticCamInfo>();
         }
         #endregion
 
         public void Reset()
         {
+            CurrentStaticCamIndex = 0;
+
             ResetCinematicInfo();
 
             // Reset seats

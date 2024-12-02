@@ -24,10 +24,15 @@ namespace SimpleHotTub
 
         private int playerHandle;
         private int playerGroupHandle;
+        private Vector3 playerPosition;
 
         // Camera
         private CameraView currentCameraView;
         private NativeCamera hotTubCam;
+
+        private Vector3 cameraPosition;
+        private Vector3 cameraRotation;
+        private float cameraFOV;
         
         // Lists
         private List<HotTub> hotTubs;
@@ -51,10 +56,11 @@ namespace SimpleHotTub
         // Other
         private HotTub currentHotTub;
         private Stopwatch timeInHotTubWatch;
+        private bool isInHotTubMenuTab;
         private bool allowVisualization;
-        private bool visualizeHotTubStuff;
         private bool setNewSeat;
         private int forcedSeat = -1;
+        private int amountOfPeopleInHotTub;
 
         private bool previousHudOnState;
         private uint previousRadarMode;
@@ -135,6 +141,7 @@ namespace SimpleHotTub
                 return;
 
             // Reset some things
+            amountOfPeopleInHotTub = 0;
             hasMemberReacted = false;
             waitingForMemberSpeechToFinish = false;
             currentCameraView = CameraView.Free;
@@ -170,9 +177,14 @@ namespace SimpleHotTub
                 
                 GET_CHAR_MODEL(pedHandle, out uint pedModel);
 
-                // Prepare the ped
-                //SET_CHAR_COLLISION(pedHandle, false);
-                //FREEZE_CHAR_POSITION(pedHandle, true);
+                // Find free seat
+                SeatInfo seat = currentHotTub.GetRandomUnoccupiedSeat();
+
+                if (seat == null)
+                {
+                    Logging.LogDebug("Failed to find free seat for ped {0}!", pedHandle);
+                    continue;
+                }
 
                 // Place them in their new clothes (If they got custom clothes)
                 PedOutfit outfit = FindPedOutfit(pedModel);
@@ -192,16 +204,8 @@ namespace SimpleHotTub
                 // Store the current position
                 storedPositions.Add(pedHandle, ped.Matrix.Pos);
 
-                // Find free seat
-                SeatInfo seat = currentHotTub.GetRandomUnoccupiedSeat();
-
-                if (seat == null)
-                {
-                    Logging.LogDebug("Failed to find free seat for ped {0}!", pedHandle);
-                    continue;
-                }
-
                 seat.SetOccupied(ped);
+                amountOfPeopleInHotTub++;
 
                 // Teleport ped to found seat
                 ped.Teleport(seat.Position, false, true);
@@ -239,6 +243,8 @@ namespace SimpleHotTub
                 IVMenuManager.HudOn = previousHudOnState;
                 IVMenuManager.RadarMode = previousRadarMode;
             }
+
+            amountOfPeopleInHotTub = 0;
 
             // Delete cam
             if (hotTubCam.IsActive)
@@ -416,10 +422,26 @@ namespace SimpleHotTub
 
             if (!set)
             {
-                currentCameraView = (CameraView)(int)currentCameraView + 1;
-
-                if (currentCameraView == CameraView.MAX)
+                if (currentCameraView == CameraView.Cinematic)
+                {
                     currentCameraView = CameraView.Free;
+                }
+                else
+                {
+                    if (currentCameraView == CameraView.Static)
+                    {
+                        if (!(currentHotTub.CurrentStaticCamIndex < currentHotTub.StaticCameras.Count))
+                        {
+                            currentCameraView = (CameraView)(int)currentCameraView + 1;
+                            currentHotTub.CurrentStaticCamIndex = 0;
+                        }
+                    }
+                    else
+                    {
+                        currentCameraView = (CameraView)(int)currentCameraView + 1;
+                    }
+                }
+
             }
             else
             {
@@ -434,32 +456,26 @@ namespace SimpleHotTub
                         hotTubCam.Deactivate();
 
                     break;
-                case CameraView.FrontRightSeat:
+                case CameraView.Static:
 
-                    hotTubCam.Position = new Vector3(-414.971f, 1453.447f, 39.444f);
-                    hotTubCam.Rotation = new Vector3(-0.753f, 0.0f, 118.990f);
+                    // Go through static cams for the current hot tub
+                    if (!(currentHotTub.CurrentStaticCamIndex >= 0 && currentHotTub.CurrentStaticCamIndex < currentHotTub.StaticCameras.Count))
+                        break;
+
+                    StaticCamInfo staticCamInfo = currentHotTub.StaticCameras[currentHotTub.CurrentStaticCamIndex];
+
+                    // Set static cam properties
+                    hotTubCam.Position = staticCamInfo.Position;
+                    hotTubCam.Rotation = staticCamInfo.Rotation;
+
+                    if (hotTubCam.FOV < 10f)
+                        hotTubCam.FOV = 45f;
+                    else
+                        hotTubCam.FOV = staticCamInfo.FOV;
+
                     hotTubCam.Activate();
 
-                    break;
-                case CameraView.FrontLeftSeat:
-
-                    hotTubCam.Position = new Vector3(-416.8f, 1449.6f, 39.872f);
-                    hotTubCam.Rotation = new Vector3(-9.436f, 0.0f, 19.578f);
-                    hotTubCam.Activate();
-
-                    break;
-                case CameraView.BackRightSeat:
-
-                    hotTubCam.Position = new Vector3(-421.317f, 1453.216f, 39.352f);
-                    hotTubCam.Rotation = new Vector3(1.511f, 0.0f, -114.006f);
-                    hotTubCam.Activate();
-
-                    break;
-                case CameraView.BackLeftSeat:
-
-                    hotTubCam.Position = new Vector3(-418.050f, 1455.160f, 39.858f);
-                    hotTubCam.Rotation = new Vector3(-7.406f, 0.0f, -177.903f);
-                    hotTubCam.Activate();
+                    currentHotTub.CurrentStaticCamIndex++;
 
                     break;
                 case CameraView.Cinematic:
@@ -496,15 +512,15 @@ namespace SimpleHotTub
                 return;
             if (currentHotTub == null)
                 return;
-            if (currentHotTub.CinematicInfo.Count == 0)
+            if (currentHotTub.CinematicCameras.Count == 0)
                 return;
 
             // Get random cinematic info object if there is none yet
             if (currentHotTub.CurrentCinematicInfo == null)
             {
                 // Get random cinematic info
-                currentHotTub.LastCinematicInfoIndex = GENERATE_RANDOM_INT_IN_RANGE(0, currentHotTub.CinematicInfo.Count - 1);
-                currentHotTub.CurrentCinematicInfo = currentHotTub.CinematicInfo[currentHotTub.LastCinematicInfoIndex];
+                currentHotTub.LastCinematicInfoIndex = GENERATE_RANDOM_INT_IN_RANGE(0, currentHotTub.CinematicCameras.Count);
+                currentHotTub.CurrentCinematicInfo = currentHotTub.CinematicCameras[currentHotTub.LastCinematicInfoIndex];
 
                 SetCamCinematicProperties(currentHotTub.CurrentCinematicInfo);
             }
@@ -513,16 +529,16 @@ namespace SimpleHotTub
             if (Vector3.Distance(hotTubCam.Position, currentHotTub.CurrentCinematicInfo.To) < 0.001f)
             {
                 // Get next random cinematic info
-                int nextCinematicInfoIndex = GENERATE_RANDOM_INT_IN_RANGE(0, currentHotTub.CinematicInfo.Count - 1);
+                int nextCinematicInfoIndex = GENERATE_RANDOM_INT_IN_RANGE(0, currentHotTub.CinematicCameras.Count);
 
                 // Try to not get the last index again
                 while (nextCinematicInfoIndex == currentHotTub.LastCinematicInfoIndex)
                 {
-                    nextCinematicInfoIndex = GENERATE_RANDOM_INT_IN_RANGE(0, currentHotTub.CinematicInfo.Count - 1);
+                    nextCinematicInfoIndex = GENERATE_RANDOM_INT_IN_RANGE(0, currentHotTub.CinematicCameras.Count);
                 }
 
                 currentHotTub.LastCinematicInfoIndex = nextCinematicInfoIndex;
-                currentHotTub.CurrentCinematicInfo = currentHotTub.CinematicInfo[currentHotTub.LastCinematicInfoIndex];
+                currentHotTub.CurrentCinematicInfo = currentHotTub.CinematicCameras[currentHotTub.LastCinematicInfoIndex];
 
                 SetCamCinematicProperties(currentHotTub.CurrentCinematicInfo);
             }
@@ -657,6 +673,7 @@ namespace SimpleHotTub
             {
                 case "GET_IS_IN_HOT_TUB": return inHotTub;
                 case "GET_TOTAL_TIME_IN_HOT_TUB": return timeInHotTubWatch.ElapsedTicks;
+                case "GET_AMOUNT_OF_PEOPLE_IN_HOT_TUB": return amountOfPeopleInHotTub;
             }
 
             return null;
@@ -667,7 +684,7 @@ namespace SimpleHotTub
             if (!MenuOpen)
                 return;
 
-            if (ImGuiIV.Begin("Simple Hot Tub Modification", ref MenuOpen))
+            if (ImGuiIV.Begin("Simple Hot Tub", ref MenuOpen))
             {
                 if (ImGuiIV.BeginTabBar("SimpleHotTubModTabBar"))
                 {
@@ -700,15 +717,16 @@ namespace SimpleHotTub
                 ImGuiIV.Spacing();
                 ImGuiIV.SeparatorText("Visualization");
                 ImGuiIV.CheckBox("Allow Visualization", ref allowVisualization);
-                ImGuiIV.CheckBox("Visualize Hot Tub Stuff", ref visualizeHotTubStuff);
 
                 ImGuiIV.Spacing();
                 ImGuiIV.SeparatorText("Seat");
                 ImGuiIV.CheckBox("SetNewSeat", ref setNewSeat);
                 ImGuiIV.SliderInt("ForcedSeat", ref forcedSeat, -1, 8);
+                ImGuiIV.TextUnformatted("People in Hot Tub: {0}", amountOfPeopleInHotTub);
 
                 ImGuiIV.Spacing();
                 ImGuiIV.SeparatorText("Other");
+                ImGuiIV.TextUnformatted("currentCameraView: {0}", currentCameraView);
                 ImGuiIV.TextUnformatted("Seconds in Hot Tub: {0}", timeInHotTubWatch.Elapsed.TotalSeconds);
 
                 ImGuiIV.EndTabItem();
@@ -718,6 +736,8 @@ namespace SimpleHotTub
         {
             if (ImGuiIV.BeginTabItem("Hot Tubs##SimpleHotTubModTabItem"))
             {
+                isInHotTubMenuTab = true;
+
                 if (ImGuiIV.Button("Reload Hot Tubs"))
                 {
                     LoadHotTubs();
@@ -738,6 +758,15 @@ namespace SimpleHotTub
                 else
                 {
                     ImGuiIV.TextDisabled("There are {0} loaded hot tubs.", hotTubs.Count);
+                    if (ImGuiIV.Button("Create new"))
+                    {
+                        hotTubs.Add(new HotTub());
+                    }
+                    ImGuiIV.SameLine();
+                    if (ImGuiIV.Button("Delete all"))
+                    {
+                        hotTubs.Clear();
+                    }
                     ImGuiIV.Spacing();
 
                     for (int i = 0; i < hotTubs.Count; i++)
@@ -746,9 +775,7 @@ namespace SimpleHotTub
 
                         if (ImGuiIV.CollapsingHeader(string.Format("Hot Tub #{0}##SimpleHotTubModHeader", i)))
                         {
-
                             ImGuiIV.SeparatorText("Control");
-
                             if (ImGuiIV.Button("Delete"))
                             {
                                 hotTubs.RemoveAt(i);
@@ -757,13 +784,29 @@ namespace SimpleHotTub
                             }
 
                             ImGuiIV.Spacing();
-                            ImGuiIV.SeparatorText("Details");
+                            ImGuiIV.SeparatorText("Debug");
+                            ImGuiIV.CheckBox("Visualize", ref hotTub.Visualize);
 
+                            ImGuiIV.Spacing();
+                            ImGuiIV.SeparatorText("Details");
                             ImGuiIV.DragFloat3(string.Format("Position##SimpleHotTubModTree_{0}", i), ref hotTub.Position, 0.01f);
 
                             ImGuiIV.Spacing();
                             if (ImGuiIV.TreeNode(string.Format("Seats##SimpleHotTubModTreeNode_{0}", i)))
                             {
+                                ImGuiIV.SeparatorText("Control");
+                                if (ImGuiIV.Button("Add new"))
+                                {
+                                    hotTub.SeatInfo.Add(new SeatInfo());
+                                }
+                                ImGuiIV.SameLine();
+                                if (ImGuiIV.Button("Delete all"))
+                                {
+                                    hotTub.SeatInfo.Clear();
+                                }
+
+                                ImGuiIV.Spacing(2);
+                                ImGuiIV.SeparatorText("Items");
                                 for (int s = 0; s < hotTub.SeatInfo.Count; s++)
                                 {
                                     SeatInfo seatInfo = hotTub.SeatInfo[s];
@@ -771,7 +814,6 @@ namespace SimpleHotTub
                                     if (ImGuiIV.TreeNode(string.Format("Seat #{0}##SimpleHotTubModTree_{1}", s, i)))
                                     {
                                         ImGuiIV.SeparatorText("Control");
-
                                         if (ImGuiIV.Button("Delete"))
                                         {
                                             hotTub.SeatInfo.RemoveAt(s);
@@ -783,28 +825,46 @@ namespace SimpleHotTub
                                         ImGuiIV.Spacing();
                                         ImGuiIV.SeparatorText("Details");
 
+                                        if (ImGuiIV.Button("Set to player pos"))
+                                        {
+                                            seatInfo.Position = playerPosition;
+                                        }
+                                        ImGuiIV.SameLine();
                                         ImGuiIV.DragFloat3("Position", ref seatInfo.Position, 0.01f);
-                                        ImGuiIV.DragFloat("Heading", ref seatInfo.Heading);
+                                        ImGuiIV.DragFloat("Heading", ref seatInfo.Heading, 0.1f);
 
                                         ImGuiIV.TreePop();
                                     }
                                 }
 
+                                ImGuiIV.Spacing(2);
                                 ImGuiIV.TreePop();
                             }
-                            if (ImGuiIV.TreeNode(string.Format("Cinematic Points##SimpleHotTubModTreeNode_{0}", i)))
+                            if (ImGuiIV.TreeNode(string.Format("Cinematic Camera Points##SimpleHotTubModTreeNode_{0}", i)))
                             {
-                                for (int s = 0; s < hotTub.CinematicInfo.Count; s++)
+                                ImGuiIV.SeparatorText("Control");
+                                if (ImGuiIV.Button("Add new"))
                                 {
-                                    CinematicInfo cinematicInfo = hotTub.CinematicInfo[s];
+                                    hotTub.CinematicCameras.Add(new CinematicInfo());
+                                }
+                                ImGuiIV.SameLine();
+                                if (ImGuiIV.Button("Delete all"))
+                                {
+                                    hotTub.CinematicCameras.Clear();
+                                }
+
+                                ImGuiIV.Spacing(2);
+                                ImGuiIV.SeparatorText("Items");
+                                for (int s = 0; s < hotTub.CinematicCameras.Count; s++)
+                                {
+                                    CinematicInfo cinematicInfo = hotTub.CinematicCameras[s];
 
                                     if (ImGuiIV.TreeNode(string.Format("Point #{0}##SimpleHotTubModTree_{1}", s, i)))
                                     {
                                         ImGuiIV.SeparatorText("Control");
-
                                         if (ImGuiIV.Button("Delete"))
                                         {
-                                            hotTub.CinematicInfo.RemoveAt(s);
+                                            hotTub.CinematicCameras.RemoveAt(s);
                                             s--;
                                             ImGuiIV.TreePop();
                                             continue;
@@ -820,14 +880,109 @@ namespace SimpleHotTub
                                         ImGuiIV.CheckBox("UseFixedRotation", ref cinematicInfo.UseFixedRotation);
 
                                         ImGuiIV.Spacing();
-                                        ImGuiIV.DragFloat3("From", ref cinematicInfo.From);
-                                        ImGuiIV.DragFloat3("To", ref cinematicInfo.To);
-                                        ImGuiIV.DragFloat3("LookAt", ref cinematicInfo.LookAt);
-                                        ImGuiIV.DragFloat3("FixedRotation", ref cinematicInfo.FixedRotation);
+
+                                        if (ImGuiIV.Button("Set to camera pos"))
+                                        {
+                                            cinematicInfo.From = cameraPosition;
+                                        }
+                                        ImGuiIV.SameLine();
+                                        ImGuiIV.DragFloat3("From", ref cinematicInfo.From, 0.01f);
+
+                                        if (ImGuiIV.Button("Set to camera pos"))
+                                        {
+                                            cinematicInfo.To = cameraPosition;
+                                        }
+                                        ImGuiIV.SameLine();
+                                        ImGuiIV.DragFloat3("To", ref cinematicInfo.To, 0.01f);
+
+                                        if (ImGuiIV.Button("Set to camera pos"))
+                                        {
+                                            cinematicInfo.LookAt = cameraPosition;
+                                        }
+                                        ImGuiIV.SameLine();
+                                        ImGuiIV.DragFloat3("LookAt", ref cinematicInfo.LookAt, 0.01f);
+
+                                        if (ImGuiIV.Button("Set to camera rot"))
+                                        {
+                                            cinematicInfo.FixedRotation = cameraRotation;
+                                        }
+                                        ImGuiIV.SameLine();
+                                        ImGuiIV.DragFloat3("FixedRotation", ref cinematicInfo.FixedRotation, 0.01f);
 
                                         ImGuiIV.Spacing();
-                                        ImGuiIV.DragFloat("FOV", ref cinematicInfo.FOV);
+                                        if (ImGuiIV.Button("Set to camera FOV"))
+                                        {
+                                            cinematicInfo.FOV = cameraFOV;
+                                        }
+                                        ImGuiIV.SameLine();
+                                        ImGuiIV.DragFloat("FOV", ref cinematicInfo.FOV, 0.1f);
                                         ImGuiIV.DragFloat("Speed", ref cinematicInfo.Speed, 0.001f);
+
+                                        ImGuiIV.TreePop();
+                                    }
+                                }
+
+                                ImGuiIV.Spacing(2);
+                                ImGuiIV.TreePop();
+                            }
+                            if (ImGuiIV.TreeNode(string.Format("Static Camera Points##SimpleHotTubTreeNode_{0}", i)))
+                            {
+                                ImGuiIV.SeparatorText("Control");
+                                if (ImGuiIV.Button("Add new"))
+                                {
+                                    hotTub.StaticCameras.Add(new StaticCamInfo());
+                                }
+                                ImGuiIV.SameLine();
+                                if (ImGuiIV.Button("Delete all"))
+                                {
+                                    hotTub.StaticCameras.Clear();
+                                }
+
+                                ImGuiIV.Spacing(2);
+                                ImGuiIV.SeparatorText("Items");
+
+                                for (int s = 0; s < hotTub.StaticCameras.Count; s++)
+                                {
+                                    StaticCamInfo staticCamInfo = hotTub.StaticCameras[s];
+
+                                    if (ImGuiIV.TreeNode(string.Format("Point #{0}##SimpleHotTubModSTree_{1}", s, i)))
+                                    {
+                                        ImGuiIV.SeparatorText("Control");
+                                        if (ImGuiIV.Button("Delete"))
+                                        {
+                                            hotTub.StaticCameras.RemoveAt(s);
+                                            s--;
+                                            ImGuiIV.TreePop();
+                                            continue;
+                                        }
+
+                                        ImGuiIV.Spacing();
+                                        ImGuiIV.SeparatorText("Debug");
+                                        ImGuiIV.CheckBox("Visualize", ref staticCamInfo.Visualize);
+
+                                        ImGuiIV.Spacing();
+                                        ImGuiIV.SeparatorText("Details");
+
+                                        if (ImGuiIV.Button("Set to camera pos"))
+                                        {
+                                            staticCamInfo.Position = cameraPosition;
+                                        }
+                                        ImGuiIV.SameLine();
+                                        ImGuiIV.DragFloat3("Position", ref staticCamInfo.Position, 0.01f);
+
+                                        if (ImGuiIV.Button("Set to camera rot"))
+                                        {
+                                            staticCamInfo.Rotation = cameraRotation;
+                                        }
+                                        ImGuiIV.SameLine();
+                                        ImGuiIV.DragFloat3("Rotation", ref staticCamInfo.Rotation, 0.01f);
+
+                                        if (ImGuiIV.Button("Set to camera FOV"))
+                                        {
+                                            staticCamInfo.FOV = cameraFOV;
+                                        }
+                                        ImGuiIV.SameLine();
+                                        ImGuiIV.DragFloat("FOV", ref staticCamInfo.FOV, 0.1f);
 
                                         ImGuiIV.TreePop();
                                     }
@@ -840,6 +995,10 @@ namespace SimpleHotTub
                 }
 
                 ImGuiIV.EndTabItem();
+            }
+            else
+            {
+                isInHotTubMenuTab = false;
             }
         }
         private void SettingsTab()
@@ -888,10 +1047,29 @@ namespace SimpleHotTub
             }
 
             playerHandle = NativeGame.GetPlayerPedHandle();
-            GET_CHAR_COORDINATES(playerHandle, out Vector3 playerPos);
+            GET_CHAR_COORDINATES(playerHandle, out playerPosition);
+
+            // Get current camera position for when in the hot tubs menu tab
+            if (isInHotTubMenuTab)
+            {
+                GET_ROOT_CAM(out int rootCam);
+
+                if (rootCam != 0)
+                {
+                    GET_CAM_POS(rootCam, out cameraPosition);
+                    GET_CAM_ROT(rootCam, out cameraRotation);
+                    GET_CAM_FOV(rootCam, out cameraFOV);
+                }
+                else
+                {
+                    cameraPosition = Vector3.Zero;
+                    cameraRotation = Vector3.Zero;
+                    cameraFOV = 45f;
+                }
+            }
 
             // Check if there is any hot tub near the player
-            currentHotTub = FindClosestHotTub(playerPos);
+            currentHotTub = FindClosestHotTub(playerPosition);
 
             if (currentHotTub != null)
             {
@@ -958,6 +1136,10 @@ namespace SimpleHotTub
             }
             else
             {
+                // If there is no hot tub near the player, but the inHotTub state is set to true, we instantly leave the hot tub
+                if (inHotTub)
+                    LeaveHotTub();
+
                 ClearHelpMessages();
             }
 
@@ -973,7 +1155,7 @@ namespace SimpleHotTub
                 {
                     HotTub hotTub = hotTubs[i];
 
-                    if (visualizeHotTubStuff)
+                    if (hotTub.Visualize)
                     {
                         DRAW_CHECKPOINT(hotTub.Position, 0.5f, System.Drawing.Color.Red);
 
@@ -983,9 +1165,9 @@ namespace SimpleHotTub
                         }
                     }
 
-                    for (int v = 0; v < hotTub.CinematicInfo.Count; v++)
+                    for (int v = 0; v < hotTub.CinematicCameras.Count; v++)
                     {
-                        CinematicInfo cinematicInfo = hotTub.CinematicInfo[v];
+                        CinematicInfo cinematicInfo = hotTub.CinematicCameras[v];
 
                         if (!cinematicInfo.Visualize)
                             continue;
@@ -993,6 +1175,16 @@ namespace SimpleHotTub
                         DRAW_CHECKPOINT(cinematicInfo.From, 0.5f, System.Drawing.Color.Red);
                         DRAW_CHECKPOINT(cinematicInfo.To, 0.5f, System.Drawing.Color.Blue);
                         DRAW_CHECKPOINT(cinematicInfo.LookAt, 0.35f, System.Drawing.Color.Yellow);
+                    }
+
+                    for (int v = 0; v < hotTub.StaticCameras.Count; v++)
+                    {
+                        StaticCamInfo staticCamInfo = hotTub.StaticCameras[v];
+
+                        if (!staticCamInfo.Visualize)
+                            continue;
+
+                        DRAW_CHECKPOINT(staticCamInfo.Position, 0.5f, System.Drawing.Color.Red);
                     }
                 }
             }
